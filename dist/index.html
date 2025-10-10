@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Launcher</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Project Launcher</h1>
+            <button id="addProjectBtn" class="btn btn-primary">+ Add Project</button>
+        </header>
+
+        <div id="projectsList" class="projects-list">
+            <!-- Projects will be dynamically added here -->
+        </div>
+
+        <!-- Modal for adding projects -->
+        <div id="addProjectModal" class="modal hidden">
+            <div class="modal-content">
+                <h2 id="modalTitle">Add New Project</h2>
+                <form id="addProjectForm">
+                    <input type="hidden" id="editIndex" value="">
+                    <div class="form-group">
+                        <label for="projectName">Project Name</label>
+                        <input type="text" id="projectName" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="projectType">Project Type</label>
+                        <select id="projectType" required>
+                            <option value="">Select Type</option>
+                            <option value="java-maven">Java (Maven)</option>
+                            <option value="java-gradle">Java (Gradle)</option>
+                            <option value="angular">Angular</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="projectPath">Project Path</label>
+                        <div class="path-input">
+                            <input type="text" id="projectPath" required>
+                            <button type="button" id="browseBtn" class="btn btn-secondary">Browse</button>
+                        </div>
+                    </div>
+                    <div class="form-group" id="commandGroup">
+                        <label for="startCommand">Start Command</label>
+                        <input type="text" id="startCommand" placeholder="e.g., mvn spring-boot:run">
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" id="cancelBtn" class="btn btn-secondary">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Add Project</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let projects = [];
+        let invoke, open;
+
+        // Wait for DOM to be ready
+        window.addEventListener('DOMContentLoaded', async () => {
+            console.log('DOMContentLoaded fired');
+            console.log('window.__TAURI__:', window.__TAURI__);
+
+            // Wait for Tauri to be available
+            if (window.__TAURI__) {
+                invoke = window.__TAURI__.core.invoke;
+                open = window.__TAURI__.dialog.open;
+            } else {
+                console.error('Tauri API not available!');
+                alert('Error: Tauri API not loaded');
+                return;
+            }
+
+            // Initialize DOM Elements
+            const addProjectBtn = document.getElementById('addProjectBtn');
+            const addProjectModal = document.getElementById('addProjectModal');
+            const addProjectForm = document.getElementById('addProjectForm');
+            const cancelBtn = document.getElementById('cancelBtn');
+            const projectsList = document.getElementById('projectsList');
+            const browseBtn = document.getElementById('browseBtn');
+            const projectTypeSelect = document.getElementById('projectType');
+            const startCommandInput = document.getElementById('startCommand');
+
+            // Show/hide modal
+            addProjectBtn.addEventListener('click', () => {
+                console.log('Add Project button clicked!');
+                document.getElementById('modalTitle').textContent = 'Add New Project';
+                document.getElementById('editIndex').value = '';
+                addProjectForm.reset();
+                addProjectModal.classList.remove('hidden');
+            });
+
+            cancelBtn.addEventListener('click', () => {
+                addProjectModal.classList.add('hidden');
+                addProjectForm.reset();
+                document.getElementById('editIndex').value = '';
+            });
+
+            // Browse for directory
+            browseBtn.addEventListener('click', async () => {
+                try {
+                    const selected = await open({
+                        directory: true,
+                        multiple: false,
+                    });
+
+                    if (selected) {
+                        document.getElementById('projectPath').value = selected;
+                    }
+                } catch (error) {
+                    console.error('Error selecting directory:', error);
+                }
+            });
+
+            // Update start command placeholder based on project type
+            projectTypeSelect.addEventListener('change', (e) => {
+                const type = e.target.value;
+                if (type === 'java-maven') {
+                    startCommandInput.placeholder = 'e.g., mvn clean spring-boot:run';
+                    startCommandInput.value = startCommandInput.value || 'mvn clean spring-boot:run';
+                } else if (type === 'java-gradle') {
+                    startCommandInput.placeholder = 'e.g., ./gradlew clean bootRun';
+                    startCommandInput.value = startCommandInput.value || './gradlew clean bootRun';
+                } else if (type === 'angular') {
+                    startCommandInput.placeholder = 'e.g., npm run udev:shell';
+                    startCommandInput.value = startCommandInput.value || 'npm run start';
+                }
+            });
+
+            // Add or edit project
+            addProjectForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                const editIndex = document.getElementById('editIndex').value;
+                const projectData = {
+                    name: document.getElementById('projectName').value,
+                    type: document.getElementById('projectType').value,
+                    path: document.getElementById('projectPath').value,
+                    command: document.getElementById('startCommand').value,
+                    running: false,
+                    output: ''
+                };
+
+                if (editIndex !== '') {
+                    // Edit existing project
+                    const index = parseInt(editIndex);
+                    projects[index] = {
+                        ...projects[index],
+                        ...projectData
+                    };
+                } else {
+                    // Add new project
+                    projects.push(projectData);
+                }
+
+                await saveProjects();
+                renderProjects();
+
+                addProjectModal.classList.add('hidden');
+                addProjectForm.reset();
+                document.getElementById('editIndex').value = '';
+            });
+
+            // Load initial data
+            await loadProjects();
+            renderProjects();
+        });
+
+        // Load projects from storage
+        async function loadProjects() {
+            try {
+                const stored = await invoke('get_projects');
+
+                // If no projects exist, initialize with default projects
+                if (!stored || stored.length === 0) {
+                    projects = [
+                        {
+                            name: 'pro-shell-ng',
+                            type: 'angular',
+                            path: '/home/moby/Workspace/pro-shell-ng',
+                            command: 'npm run udev:shell',
+                            running: false,
+                            output: ''
+                        },
+                        {
+                            name: 'pro-shell-gw',
+                            type: 'java-gradle',
+                            path: '/home/moby/Workspace/pro-shell-gw',
+                            command: './gradlew clean bootJar && java -jar gateway/build/libs/pro-shell.jar --spring.profiles.active=local',
+                            running: false,
+                            output: ''
+                        }
+                    ];
+                    await saveProjects();
+                } else {
+                    projects = stored.map(project => ({
+                        ...project,
+                        running: false,  // Always start with all projects stopped
+                        output: ''       // Clear previous output
+                    }));
+                }
+            } catch (error) {
+                console.error('Error loading projects:', error);
+                projects = [];
+            }
+        }
+
+        // Save projects to storage
+        async function saveProjects() {
+            try {
+                await invoke('save_projects', { projects });
+            } catch (error) {
+                console.error('Error saving projects:', error);
+            }
+        }
+
+        // Render projects list
+        function renderProjects() {
+            if (projects.length === 0) {
+                projectsList.innerHTML = `
+                    <div class="empty-state">
+                        <h2>No Projects Yet</h2>
+                        <p>Click "Add Project" to get started</p>
+                    </div>
+                `;
+                return;
+            }
+
+            projectsList.innerHTML = projects.map((project, index) => `
+                <div class="project-card" data-index="${index}">
+                    <div class="project-header">
+                        <div class="project-info">
+                            <h3>${project.name}</h3>
+                            <span class="project-type ${project.type}">${project.type}</span>
+                        </div>
+                        <button class="delete-btn" onclick="deleteProject(${index})">×</button>
+                    </div>
+                    <div class="project-path">${project.path}</div>
+                    <div class="project-status">
+                        <span class="status-indicator ${project.running ? 'running' : 'stopped'}"></span>
+                        <span>${project.running ? 'Running' : 'Stopped'}</span>
+                    </div>
+                    <div class="project-actions">
+                        ${project.running
+                            ? `<button class="btn btn-danger" onclick="stopProject(${index})">Stop</button>`
+                            : `<button class="btn btn-success" onclick="startProject(${index})">Start</button>`
+                        }
+                        <button class="btn btn-secondary" onclick="editProject(${index})">Edit</button>
+                    </div>
+                    ${project.output ? `
+                        <div class="output-section">
+                            <div class="output-header">
+                                <span>Output:</span>
+                                <button class="clear-output" onclick="clearOutput(${index})">Clear</button>
+                            </div>
+                            <pre>${project.output}</pre>
+                        </div>
+                    ` : ''}
+                </div>
+            `).join('');
+        }
+
+        // Start project
+        window.startProject = async (index) => {
+            const project = projects[index];
+
+            try {
+                await invoke('start_project', {
+                    path: project.path,
+                    command: project.command,
+                    index: index
+                });
+
+                project.running = true;
+                project.output = 'Starting project...\n';
+                renderProjects();
+                await saveProjects();
+
+                // Start listening for output
+                listenToOutput(index);
+            } catch (error) {
+                console.error('Error starting project:', error);
+                project.output = `Error: ${error}\n`;
+                renderProjects();
+            }
+        };
+
+        // Stop project
+        window.stopProject = async (index) => {
+            const project = projects[index];
+
+            try {
+                await invoke('stop_project', { index: index });
+                project.running = false;
+                project.output += '\nProject stopped.\n';
+                renderProjects();
+                await saveProjects();
+            } catch (error) {
+                console.error('Error stopping project:', error);
+                project.output += `\nError stopping: ${error}\n`;
+                renderProjects();
+            }
+        };
+
+        // Edit project
+        window.editProject = (index) => {
+            const project = projects[index];
+
+            // Populate form with project data
+            document.getElementById('modalTitle').textContent = 'Edit Project';
+            document.getElementById('editIndex').value = index;
+            document.getElementById('projectName').value = project.name;
+            document.getElementById('projectType').value = project.type;
+            document.getElementById('projectPath').value = project.path;
+            document.getElementById('startCommand').value = project.command;
+
+            // Show modal
+            document.getElementById('addProjectModal').classList.remove('hidden');
+        };
+
+        // Delete project
+        window.deleteProject = async (index) => {
+            if (projects[index].running) {
+                await window.stopProject(index);
+            }
+
+            projects.splice(index, 1);
+            await saveProjects();
+            renderProjects();
+        };
+
+        // Clear output
+        window.clearOutput = async (index) => {
+            projects[index].output = '';
+            renderProjects();
+            await saveProjects();
+        };
+
+        // Listen to project output
+        async function listenToOutput(index) {
+            const interval = setInterval(async () => {
+                if (!projects[index].running) {
+                    clearInterval(interval);
+                    return;
+                }
+
+                try {
+                    const output = await invoke('get_project_output', { index: index });
+                    if (output !== projects[index].output) {
+                        projects[index].output = output;
+                        renderProjects();
+                    }
+                } catch (error) {
+                    console.error('Error getting output:', error);
+                }
+            }, 1000);
+        }
+    </script>
+</body>
+</html>
