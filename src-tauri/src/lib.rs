@@ -78,15 +78,21 @@ fn start_project(
             .spawn()
             .map_err(|e| format!("Failed to start process: {}", e))?
     } else {
-        // Unix: use bash with login shell to load PATH
+        // Unix: use bash with interactive login shell to properly load PATH
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
 
         #[cfg(unix)]
         {
+            // Source the user's profile and then run the command
+            // This ensures npm, node, and other tools are available
+            let wrapped_command = format!(
+                "source ~/.profile 2>/dev/null || true; source ~/.bashrc 2>/dev/null || true; source ~/.zshrc 2>/dev/null || true; {}",
+                command
+            );
+
             Command::new(&shell)
-                .arg("-l")  // login shell - loads user's profile
                 .arg("-c")  // command mode
-                .arg(&command)
+                .arg(&wrapped_command)
                 .current_dir(&path)
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
@@ -97,10 +103,14 @@ fn start_project(
 
         #[cfg(not(unix))]
         {
+            let wrapped_command = format!(
+                "source ~/.profile 2>/dev/null || true; source ~/.bashrc 2>/dev/null || true; {}",
+                command
+            );
+
             Command::new(&shell)
-                .arg("-l")
                 .arg("-c")
-                .arg(&command)
+                .arg(&wrapped_command)
                 .current_dir(&path)
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
