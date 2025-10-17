@@ -10,7 +10,11 @@
     <div class="container">
         <header>
             <h1>Project Launcher</h1>
-            <button id="addProjectBtn" class="btn btn-primary">+ Add Project</button>
+            <div class="header-actions">
+                <button id="stopAllBtn" class="btn btn-warning">⏹ Stop All</button>
+                <button id="settingsBtn" class="btn btn-icon" title="Settings">⚙️</button>
+                <button id="addProjectBtn" class="btn btn-primary">+ Add Project</button>
+            </div>
         </header>
 
         <div id="projectsList" class="projects-list">
@@ -68,6 +72,34 @@
                 </div>
             </div>
         </div>
+
+        <!-- Settings modal -->
+        <div id="settingsModal" class="modal hidden">
+            <div class="modal-content">
+                <h2>Settings</h2>
+                <div class="settings-section">
+                    <h3>Data Management</h3>
+                    <p class="settings-description">Reset all project data and clear saved configurations.</p>
+                    <button type="button" id="resetDataBtn" class="btn btn-danger">Reset All Data</button>
+                </div>
+                <div class="form-actions">
+                    <button type="button" id="closeSettingsBtn" class="btn btn-secondary">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Reset confirmation modal -->
+        <div id="resetConfirmModal" class="modal hidden">
+            <div class="modal-content">
+                <h2>⚠️ Reset All Data</h2>
+                <p>This will permanently delete all your projects and configurations. This action cannot be undone.</p>
+                <p><strong>Are you sure you want to continue?</strong></p>
+                <div class="form-actions">
+                    <button type="button" id="cancelResetBtn" class="btn btn-secondary">Cancel</button>
+                    <button type="button" id="confirmResetBtn" class="btn btn-danger">Yes, Reset All Data</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -102,6 +134,14 @@
             const deleteConfirmModal = document.getElementById('deleteConfirmModal');
             const cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
             const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+            const stopAllBtn = document.getElementById('stopAllBtn');
+            const settingsBtn = document.getElementById('settingsBtn');
+            const settingsModal = document.getElementById('settingsModal');
+            const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+            const resetDataBtn = document.getElementById('resetDataBtn');
+            const resetConfirmModal = document.getElementById('resetConfirmModal');
+            const cancelResetBtn = document.getElementById('cancelResetBtn');
+            const confirmResetBtn = document.getElementById('confirmResetBtn');
 
             // Show/hide modal
             addProjectBtn.addEventListener('click', () => {
@@ -131,6 +171,35 @@
                     deleteConfirmModal.classList.add('hidden');
                     deleteIndex = null;
                 }
+            });
+
+            // Stop all projects handler
+            stopAllBtn.addEventListener('click', async () => {
+                await stopAllProjects();
+            });
+
+            // Settings modal handlers
+            settingsBtn.addEventListener('click', () => {
+                settingsModal.classList.remove('hidden');
+            });
+
+            closeSettingsBtn.addEventListener('click', () => {
+                settingsModal.classList.add('hidden');
+            });
+
+            // Reset data handlers
+            resetDataBtn.addEventListener('click', () => {
+                settingsModal.classList.add('hidden');
+                resetConfirmModal.classList.remove('hidden');
+            });
+
+            cancelResetBtn.addEventListener('click', () => {
+                resetConfirmModal.classList.add('hidden');
+            });
+
+            confirmResetBtn.addEventListener('click', async () => {
+                await resetAllData();
+                resetConfirmModal.classList.add('hidden');
             });
 
             // Browse for directory
@@ -439,6 +508,55 @@
                     console.error('Error getting output:', error);
                 }
             }, 1000);
+        }
+
+        // Stop all running projects
+        async function stopAllProjects() {
+            try {
+                let stoppedCount = 0;
+
+                for (let i = 0; i < projects.length; i++) {
+                    if (projects[i].running) {
+                        await window.stopProject(i);
+                        stoppedCount++;
+                    }
+                }
+
+                if (stoppedCount === 0) {
+                    console.log('No running projects to stop');
+                } else {
+                    console.log(`Stopped ${stoppedCount} project(s)`);
+                }
+            } catch (error) {
+                console.error('Error stopping all projects:', error);
+                alert('Error stopping projects: ' + error);
+            }
+        }
+
+        // Reset all data
+        async function resetAllData() {
+            try {
+                // Stop all running projects
+                for (let i = 0; i < projects.length; i++) {
+                    if (projects[i].running) {
+                        await invoke('stop_project', { index: i });
+                    }
+                }
+
+                // Clear projects array
+                projects = [];
+
+                // Save empty projects list
+                await saveProjects();
+
+                // Re-render
+                renderProjects();
+
+                console.log('All data has been reset');
+            } catch (error) {
+                console.error('Error resetting data:', error);
+                alert('Error resetting data: ' + error);
+            }
         }
     </script>
 </body>

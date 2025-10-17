@@ -27,6 +27,12 @@ header {
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
+.header-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
 h1 {
     color: #333;
     font-size: 28px;
@@ -77,6 +83,27 @@ h1 {
 
 .btn-danger:hover {
     background: #e53e3e;
+}
+
+.btn-warning {
+    background: #ed8936;
+    color: white;
+}
+
+.btn-warning:hover {
+    background: #dd6b20;
+}
+
+.btn-icon {
+    background: transparent;
+    color: #667eea;
+    padding: 8px 12px;
+    font-size: 18px;
+}
+
+.btn-icon:hover {
+    background: #f0f0f0;
+    transform: translateY(-2px);
 }
 
 .projects-list {
@@ -317,4 +344,45 @@ h1 {
     cursor: pointer;
     font-size: 11px;
     text-decoration: underline;
+}
+
+/* Settings Modal Styles */
+.settings-section {
+    margin-bottom: 20px;
+    padding: 20px;
+    background: #f7fafc;
+    border-radius: 8px;
+}
+
+.settings-section h3 {
+    color: #333;
+    font-size: 18px;
+    margin-bottom: 10px;
+}
+
+.settings-description {
+    color: #666;
+    font-size: 14px;
+    margin-bottom: 15px;
+    line-height: 1.5;
+}
+
+.settings-section .btn {
+    margin-top: 10px;
+}
+
+/* Reset confirmation modal styles */
+#resetConfirmModal .modal-content {
+    max-width: 450px;
+}
+
+#resetConfirmModal p {
+    color: #333;
+    margin-bottom: 15px;
+    line-height: 1.6;
+}
+
+#resetConfirmModal p:last-of-type {
+    font-size: 15px;
+    margin-top: 20px;
 }
