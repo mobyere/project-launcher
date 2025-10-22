@@ -211,6 +211,137 @@ fn get_project_output(state: State<AppState>, index: usize) -> Result<String, St
     }
 }
 
+#[tauri::command]
+fn detect_package_manager(path: String) -> Result<String, String> {
+    let path_buf = std::path::PathBuf::from(&path);
+
+    // Check for yarn.lock first
+    if path_buf.join("yarn.lock").exists() {
+        return Ok("yarn".to_string());
+    }
+
+    // Check for package-lock.json
+    if path_buf.join("package-lock.json").exists() {
+        return Ok("npm".to_string());
+    }
+
+    // Default to npm if no lock file found
+    Ok("npm".to_string())
+}
+
+#[tauri::command]
+fn install_packages(
+    state: State<AppState>,
+    path: String,
+    package_manager: String,
+    index: usize,
+) -> Result<(), String> {
+    let command = match package_manager.as_str() {
+        "yarn" => "yarn install",
+        "npm" => "npm install",
+        _ => return Err("Invalid package manager".to_string()),
+    };
+
+    // Use the same logic as start_project to run the install command
+    let mut child = if cfg!(target_os = "windows") {
+        Command::new("cmd")
+            .arg("/C")
+            .arg(command)
+            .current_dir(&path)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("Failed to start install: {}", e))?
+    } else {
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
+
+        #[cfg(unix)]
+        {
+            let wrapped_command = format!(
+                "source ~/.profile 2>/dev/null || true; source ~/.bashrc 2>/dev/null || true; source ~/.zshrc 2>/dev/null || true; {}",
+                command
+            );
+
+            Command::new(&shell)
+                .arg("-c")
+                .arg(&wrapped_command)
+                .current_dir(&path)
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .process_group(0)
+                .spawn()
+                .map_err(|e| format!("Failed to start install with {}: {}", shell, e))?
+        }
+
+        #[cfg(not(unix))]
+        {
+            let wrapped_command = format!(
+                "source ~/.profile 2>/dev/null || true; source ~/.bashrc 2>/dev/null || true; {}",
+                command
+            );
+
+            Command::new(&shell)
+                .arg("-c")
+                .arg(&wrapped_command)
+                .current_dir(&path)
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .map_err(|e| format!("Failed to start install with {}: {}", shell, e))?
+        }
+    };
+
+    // Take stdout and stderr to read in background threads
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+
+    // Store the process
+    let mut processes = state.processes.lock().unwrap();
+    processes.insert(index, child);
+
+    // Initialize/append to output
+    let mut outputs = state.outputs.lock().unwrap();
+    let output_str = outputs.entry(index).or_insert_with(String::new);
+    output_str.push_str(&format!("Running {} install...\n", package_manager));
+    drop(outputs);
+
+    // Spawn thread to read stdout
+    if let Some(stdout) = stdout {
+        let outputs_clone = state.outputs.clone();
+        thread::spawn(move || {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    let mut outputs = outputs_clone.lock().unwrap();
+                    if let Some(output) = outputs.get_mut(&index) {
+                        output.push_str(&line);
+                        output.push('\n');
+                    }
+                }
+            }
+        });
+    }
+
+    // Spawn thread to read stderr
+    if let Some(stderr) = stderr {
+        let outputs_clone = state.outputs.clone();
+        thread::spawn(move || {
+            let reader = BufReader::new(stderr);
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    let mut outputs = outputs_clone.lock().unwrap();
+                    if let Some(output) = outputs.get_mut(&index) {
+                        output.push_str(&line);
+                        output.push('\n');
+                    }
+                }
+            }
+        });
+    }
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -235,7 +366,9 @@ pub fn run() {
             save_projects,
             start_project,
             stop_project,
-            get_project_output
+            get_project_output,
+            detect_package_manager,
+            install_packages
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

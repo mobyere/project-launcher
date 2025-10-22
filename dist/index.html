@@ -100,12 +100,14 @@
                 </div>
             </div>
         </div>
+
     </div>
 
     <script>
         let projects = [];
         let invoke, open;
         let deleteIndex = null; // Store the index of project to delete
+        let packageManagers = {}; // Store detected package managers for each project
 
         // Wait for DOM to be ready
         window.addEventListener('DOMContentLoaded', async () => {
@@ -263,6 +265,7 @@
                 }
 
                 await saveProjects();
+                await detectAllPackageManagers();
                 renderProjects();
 
                 addProjectModal.classList.add('hidden');
@@ -272,8 +275,25 @@
 
             // Load initial data
             await loadProjects();
+            await detectAllPackageManagers();
             renderProjects();
         });
+
+        // Detect package managers for all Angular projects
+        async function detectAllPackageManagers() {
+            for (let i = 0; i < projects.length; i++) {
+                const project = projects[i];
+                if (project.type === 'angular' && project.path) {
+                    try {
+                        const pm = await invoke('detect_package_manager', { path: project.path });
+                        packageManagers[i] = pm;
+                    } catch (error) {
+                        console.error('Error detecting package manager for project', i, error);
+                        packageManagers[i] = 'npm'; // default to npm
+                    }
+                }
+            }
+        }
 
         // Load projects from storage
         async function loadProjects() {
@@ -364,6 +384,8 @@
                 const missingFields = [];
                 if (!project.path) missingFields.push('path');
                 if (!project.command) missingFields.push('command');
+                const isAngular = project.type === 'angular';
+                const packageManager = packageManagers[index] || 'npm';
 
                 return `
                 <div class="project-card" data-index="${index}">
@@ -371,6 +393,7 @@
                         <div class="project-info">
                             <h3>${project.name}</h3>
                             <span class="project-type ${project.type}">${project.type}</span>
+                            ${isAngular && project.path ? `<span class="package-manager-badge">${packageManager}</span>` : ''}
                         </div>
                         <button class="delete-btn" onclick="deleteProject(${index})">×</button>
                     </div>
@@ -390,6 +413,7 @@
                             ? `<button class="btn btn-danger" onclick="stopProject(${index})">Stop</button>`
                             : `<button class="btn btn-success" onclick="startProject(${index})" ${isInvalid ? 'disabled' : ''}>Start</button>`
                         }
+                        ${isAngular && project.path && !project.running ? `<button class="btn btn-install" onclick="installPackages(${index})">📦 Install</button>` : ''}
                         <button class="btn btn-secondary" onclick="editProject(${index})">Edit</button>
                     </div>
                     ${project.output ? `
@@ -501,6 +525,37 @@
             projects[index].output = '';
             renderProjects();
             await saveProjects();
+        };
+
+        // Install packages
+        window.installPackages = async (index) => {
+            const project = projects[index];
+            const packageManager = packageManagers[index] || 'npm';
+
+            if (!project.path) {
+                alert('Project path is not set');
+                return;
+            }
+
+            try {
+                project.running = true;
+                project.output = `Installing packages using ${packageManager}...\n`;
+                renderProjects();
+
+                await invoke('install_packages', {
+                    path: project.path,
+                    packageManager: packageManager,
+                    index: index
+                });
+
+                // Start listening for output
+                listenToOutput(index);
+            } catch (error) {
+                console.error('Error installing packages:', error);
+                project.output = `Error: ${error}\n`;
+                project.running = false;
+                renderProjects();
+            }
         };
 
         // Listen to project output
