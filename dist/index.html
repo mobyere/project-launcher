@@ -359,7 +359,13 @@
                 return;
             }
 
-            projectsList.innerHTML = projects.map((project, index) => `
+            projectsList.innerHTML = projects.map((project, index) => {
+                const isInvalid = !project.path || !project.command;
+                const missingFields = [];
+                if (!project.path) missingFields.push('path');
+                if (!project.command) missingFields.push('command');
+
+                return `
                 <div class="project-card" data-index="${index}">
                     <div class="project-header">
                         <div class="project-info">
@@ -368,15 +374,21 @@
                         </div>
                         <button class="delete-btn" onclick="deleteProject(${index})">×</button>
                     </div>
-                    <div class="project-path">${project.path}</div>
+                    <div class="project-path">${project.path || '<em>No path set</em>'}</div>
+                    ${isInvalid && !project.running ? `
+                        <div class="invalid-warning">
+                            <span class="invalid-warning-icon">⚠️</span>
+                            <span>Cannot start: Missing ${missingFields.join(' and ')}</span>
+                        </div>
+                    ` : ''}
                     <div class="project-status">
-                        <span class="status-indicator ${project.running ? 'running' : 'stopped'}"></span>
-                        <span>${project.running ? 'Running' : 'Stopped'}</span>
+                        <span class="status-indicator ${project.running ? 'running' : (isInvalid ? 'invalid' : 'stopped')}"></span>
+                        <span>${project.running ? 'Running' : (isInvalid ? 'Invalid' : 'Stopped')}</span>
                     </div>
                     <div class="project-actions">
                         ${project.running
                             ? `<button class="btn btn-danger" onclick="stopProject(${index})">Stop</button>`
-                            : `<button class="btn btn-success" onclick="startProject(${index})">Start</button>`
+                            : `<button class="btn btn-success" onclick="startProject(${index})" ${isInvalid ? 'disabled' : ''}>Start</button>`
                         }
                         <button class="btn btn-secondary" onclick="editProject(${index})">Edit</button>
                     </div>
@@ -390,7 +402,8 @@
                         </div>
                     ` : ''}
                 </div>
-            `).join('');
+                `;
+            }).join('');
         }
 
         // Start project
