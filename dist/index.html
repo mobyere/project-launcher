@@ -82,6 +82,11 @@
                     <p class="settings-description">Reset all project data and clear saved configurations.</p>
                     <button type="button" id="resetDataBtn" class="btn btn-danger">Reset All Data</button>
                 </div>
+                <div class="settings-section">
+                    <h3>About</h3>
+                    <p class="settings-description">View application information and version details.</p>
+                    <button type="button" id="aboutBtn" class="btn btn-secondary">About Project Launcher</button>
+                </div>
                 <div class="form-actions">
                     <button type="button" id="closeSettingsBtn" class="btn btn-secondary">Close</button>
                 </div>
@@ -97,6 +102,25 @@
                 <div class="form-actions">
                     <button type="button" id="cancelResetBtn" class="btn btn-secondary">Cancel</button>
                     <button type="button" id="confirmResetBtn" class="btn btn-danger">Yes, Reset All Data</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- About modal -->
+        <div id="aboutModal" class="modal hidden">
+            <div class="modal-content">
+                <h2>About Project Launcher</h2>
+                <div class="settings-section">
+                    <p id="appVersion" style="color: #666; font-size: 16px; font-weight: 600; margin-bottom: 20px;"></p>
+                    <p style="color: #666; line-height: 1.6; margin-bottom: 15px;">
+                        <strong>Project Launcher</strong> is a desktop application built with Tauri and Rust for managing and launching multiple development projects efficiently.
+                    </p>
+                    <p style="color: #888; font-size: 13px; margin-top: 20px;">
+                        Built with Tauri, Rust, and JavaScript with love by Claude Code and Mathieu Raujol
+                    </p>
+                </div>
+                <div class="form-actions">
+                    <button type="button" id="closeAboutBtn" class="btn btn-secondary">Close</button>
                 </div>
             </div>
         </div>
@@ -144,6 +168,9 @@
             const resetConfirmModal = document.getElementById('resetConfirmModal');
             const cancelResetBtn = document.getElementById('cancelResetBtn');
             const confirmResetBtn = document.getElementById('confirmResetBtn');
+            const aboutBtn = document.getElementById('aboutBtn');
+            const aboutModal = document.getElementById('aboutModal');
+            const closeAboutBtn = document.getElementById('closeAboutBtn');
 
             // Show/hide modal
             addProjectBtn.addEventListener('click', () => {
@@ -202,6 +229,24 @@
             confirmResetBtn.addEventListener('click', async () => {
                 await resetAllData();
                 resetConfirmModal.classList.add('hidden');
+            });
+
+            // About modal handlers
+            aboutBtn.addEventListener('click', async () => {
+                // Get and display version
+                try {
+                    const version = await window.__TAURI__.app.getVersion();
+                    document.getElementById('appVersion').textContent = `Project Launcher ${version}`;
+                } catch (error) {
+                    console.error('Error getting version:', error);
+                    document.getElementById('appVersion').textContent = 'Project Launcher 1.0.4';
+                }
+                settingsModal.classList.add('hidden');
+                aboutModal.classList.remove('hidden');
+            });
+
+            closeAboutBtn.addEventListener('click', () => {
+                aboutModal.classList.add('hidden');
             });
 
             // Browse for directory
